@@ -1,0 +1,382 @@
+"""FastMCP server entry point for freqtrade-mcp.
+
+This MCP server is strictly read-only. It inspects the installed Freqtrade
+library using Python's ``inspect`` module. It does not execute trades,
+connect to exchanges, modify configuration, or perform any operation with
+side effects. No warranty is provided — see LICENSE.
+"""
+
+import logging
+import os
+import sys
+from typing import Any
+
+from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
+
+import freqtrade_mcp
+from freqtrade_mcp._version_check import check_freqtrade_version
+from freqtrade_mcp.constants import (
+    DOCS_UNAVAILABLE_MSG,
+    ENV_DOCS_PATH,
+    ENV_LOG_LEVEL,
+    SERVER_DESCRIPTION,
+    SERVER_NAME,
+)
+from freqtrade_mcp.docs import get_doc, list_docs, search_docs
+from freqtrade_mcp.introspection import (
+    get_callback_info,
+    get_class_info,
+    get_config_schema,
+    get_dataframe_columns,
+    get_enum_values,
+    get_method_signature,
+    list_enums,
+    list_strategy_methods,
+    search_codebase,
+)
+from freqtrade_mcp.models import (
+    GetCallbackInfoInput,
+    GetClassInfoInput,
+    GetConfigSchemaInput,
+    GetDataframeColumnsInput,
+    GetDocInput,
+    GetEnumValuesInput,
+    GetMethodSignatureInput,
+    ListDocsInput,
+    ListEnumsInput,
+    ListStrategyMethodsInput,
+    SearchCodebaseInput,
+    SearchDocsInput,
+)
+
+logger = logging.getLogger(__name__)
+
+# Tool annotations: all tools are read-only, non-destructive, idempotent, closed-world
+_TOOL_ANNOTATIONS = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=False,
+)
+
+# Create the FastMCP server
+mcp = FastMCP(SERVER_NAME, instructions=SERVER_DESCRIPTION)
+
+
+# --- Tool Definitions ---
+
+
+@mcp.tool(annotations=_TOOL_ANNOTATIONS)
+def freqtrade_list_strategy_methods(
+    filter: str | None = None,  # noqa: A002
+) -> list[dict[str, Any]]:
+    """List all overridable methods from IStrategy.
+
+    Returns method names with brief descriptions. Use the optional filter
+    parameter to narrow results by keyword (e.g., "entry", "exit",
+    "indicator", "callback", "custom").
+
+    Args:
+        filter: Optional keyword to filter methods.
+
+    Returns:
+        List of method summaries with name, brief description, and callback flag.
+    """
+    input_model = ListStrategyMethodsInput(filter=filter)
+    methods = list_strategy_methods(filter_str=input_model.filter)
+    return [m.model_dump() for m in methods]
+
+
+@mcp.tool(annotations=_TOOL_ANNOTATIONS)
+def freqtrade_get_method_signature(method_name: str) -> dict[str, Any]:
+    """Get full signature of a specific IStrategy method.
+
+    Returns the complete method signature including all parameters with their
+    types, default values, return type, and the full docstring.
+
+    Args:
+        method_name: Name of the IStrategy method to inspect.
+
+    Returns:
+        Method signature details including parameters, return type, and docstring.
+    """
+    input_model = GetMethodSignatureInput(method_name=method_name)
+    result = get_method_signature(input_model.method_name)
+    return result.model_dump()
+
+
+@mcp.tool(annotations=_TOOL_ANNOTATIONS)
+def freqtrade_get_class_info(class_path: str) -> dict[str, Any]:
+    """Inspect any freqtrade class.
+
+    Returns class docstring, method resolution order (MRO), public methods,
+    and class-level attributes for a given fully-qualified class path.
+
+    Args:
+        class_path: Fully-qualified class path
+            (e.g., "freqtrade.strategy.interface.IStrategy").
+
+    Returns:
+        Class introspection result with docstring, MRO, methods, and attributes.
+    """
+    input_model = GetClassInfoInput(class_path=class_path)
+    result = get_class_info(input_model.class_path)
+    return result.model_dump()
+
+
+@mcp.tool(annotations=_TOOL_ANNOTATIONS)
+def freqtrade_list_enums(
+    filter: str | None = None,  # noqa: A002
+) -> list[dict[str, Any]]:
+    """List all trading-related enums from freqtrade.
+
+    Returns enum names, their module paths, docstrings, and member counts.
+    Use the optional filter to narrow results.
+
+    Args:
+        filter: Optional keyword filter for enum names or descriptions.
+
+    Returns:
+        List of enum summaries.
+    """
+    input_model = ListEnumsInput(filter=filter)
+    enums = list_enums(filter_str=input_model.filter)
+    return [e.model_dump() for e in enums]
+
+
+@mcp.tool(annotations=_TOOL_ANNOTATIONS)
+def freqtrade_get_enum_values(enum_path: str) -> dict[str, Any]:
+    """Get all values of a specific freqtrade enum.
+
+    Returns every member of the enum with its name and value.
+
+    Args:
+        enum_path: Fully-qualified enum path
+            (e.g., "freqtrade.enums.signaltype.SignalDirection").
+
+    Returns:
+        Enum details including all member names and values.
+    """
+    input_model = GetEnumValuesInput(enum_path=enum_path)
+    result = get_enum_values(input_model.enum_path)
+    return result.model_dump()
+
+
+@mcp.tool(annotations=_TOOL_ANNOTATIONS)
+def freqtrade_search_codebase(query: str) -> list[dict[str, Any]]:
+    """Search for symbols in the freqtrade codebase by name pattern.
+
+    Searches for classes, functions, constants, and enums matching the given
+    pattern. Supports basic regex patterns using alphanumeric characters,
+    underscores, and standard regex operators.
+
+    Args:
+        query: Search pattern for symbol names. Supports basic regex.
+
+    Returns:
+        List of matching symbols with their module paths and kinds.
+    """
+    input_model = SearchCodebaseInput(query=query)
+    matches = search_codebase(input_model.query)
+    return [m.model_dump() for m in matches]
+
+
+@mcp.tool(annotations=_TOOL_ANNOTATIONS)
+def freqtrade_get_callback_info(callback_name: str) -> dict[str, Any]:
+    """Get detailed info about a strategy callback method.
+
+    Returns the full signature, parameters with types, return type,
+    and docstring for a strategy callback like bot_start,
+    custom_stake_amount, custom_stoploss, etc.
+
+    Args:
+        callback_name: Name of the strategy callback method.
+
+    Returns:
+        Detailed callback information including signature and docstring.
+    """
+    input_model = GetCallbackInfoInput(callback_name=callback_name)
+    result = get_callback_info(input_model.callback_name)
+    return result.model_dump()
+
+
+@mcp.tool(annotations=_TOOL_ANNOTATIONS)
+def freqtrade_get_config_schema(section: str | None = None) -> list[dict[str, Any]]:
+    """Return known freqtrade configuration keys and their descriptions.
+
+    Lists configuration keys organized by section. Use the optional section
+    parameter to filter by a specific config area.
+
+    Args:
+        section: Optional section filter (e.g., "exchange", "pairlist", "stoploss").
+
+    Returns:
+        List of config key entries with descriptions.
+    """
+    input_model = GetConfigSchemaInput(section=section)
+    keys = get_config_schema(section=input_model.section)
+    return [k.model_dump() for k in keys]
+
+
+@mcp.tool(annotations=_TOOL_ANNOTATIONS)
+def freqtrade_get_dataframe_columns(context: str | None = None) -> list[dict[str, Any]]:
+    """List common DataFrame columns available in strategy methods.
+
+    Returns column names, types, and descriptions for columns available in
+    populate_indicators, populate_entry_trend, populate_exit_trend, etc.
+
+    Args:
+        context: Optional context filter: "ohlcv", "entry", "exit", or "indicators".
+            If omitted, returns all known columns.
+
+    Returns:
+        List of DataFrame column entries with descriptions and contexts.
+    """
+    input_model = GetDataframeColumnsInput(context=context)
+    columns = get_dataframe_columns(context=input_model.context)
+    return [c.model_dump() for c in columns]
+
+
+@mcp.tool(annotations=_TOOL_ANNOTATIONS)
+def freqtrade_get_version_info() -> dict[str, str]:
+    """Return installed freqtrade version and MCP server version.
+
+    Returns version information including the freqtrade-mcp server version,
+    installed freqtrade version, and Python version.
+
+    Returns:
+        Version information dictionary.
+    """
+    ft_version = check_freqtrade_version()
+    return {
+        "mcp_server_version": freqtrade_mcp.__version__,
+        "freqtrade_version": ft_version,
+        "python_version": sys.version,
+    }
+
+
+# --- Documentation Tools ---
+
+
+@mcp.tool(annotations=_TOOL_ANNOTATIONS)
+def freqtrade_list_docs(
+    filter: str | None = None,  # noqa: A002
+) -> list[dict[str, Any]] | dict[str, str]:
+    """List available freqtrade documentation topics.
+
+    Returns a list of documentation pages with their topic identifiers
+    and titles. Use the optional filter to narrow results by keyword.
+
+    Args:
+        filter: Optional keyword to filter topics (e.g., "strategy", "freqai").
+
+    Returns:
+        List of doc topic summaries, or an error message if docs not available.
+    """
+    input_model = ListDocsInput(filter=filter)
+    result = list_docs(filter_str=input_model.filter)
+    if result is None:
+        return {"error": DOCS_UNAVAILABLE_MSG}
+    return [t.model_dump() for t in result]
+
+
+@mcp.tool(annotations=_TOOL_ANNOTATIONS)
+def freqtrade_search_docs(
+    query: str,
+    max_results: int = 10,
+) -> list[dict[str, Any]] | dict[str, str]:
+    """Search across all freqtrade documentation.
+
+    Performs full-text search across all documentation pages and returns
+    matching snippets with surrounding context. Multiple words use AND logic.
+
+    Args:
+        query: Search text (e.g., "custom stoploss", "backtesting timerange").
+        max_results: Maximum number of results to return (1-50, default 10).
+
+    Returns:
+        List of search results with snippets, or error if docs not available.
+    """
+    input_model = SearchDocsInput(query=query, max_results=max_results)
+    result = search_docs(query=input_model.query, max_results=input_model.max_results)
+    if result is None:
+        return {"error": DOCS_UNAVAILABLE_MSG}
+    return [r.model_dump() for r in result]
+
+
+@mcp.tool(annotations=_TOOL_ANNOTATIONS)
+def freqtrade_get_doc(topic: str) -> dict[str, Any] | dict[str, str]:
+    """Read a specific freqtrade documentation page.
+
+    Returns the full markdown content of a documentation page by topic name.
+    Use freqtrade_list_docs to discover available topic names.
+
+    Args:
+        topic: Topic name (e.g., "strategy-callbacks", "configuration",
+            "commands/backtesting").
+
+    Returns:
+        Full document content with title and metadata, or error if not available.
+    """
+    input_model = GetDocInput(topic=topic)
+    result = get_doc(topic=input_model.topic)
+    if result is None:
+        return {"error": DOCS_UNAVAILABLE_MSG}
+    return result.model_dump()
+
+
+def _configure_logging() -> None:
+    """Configure logging to stderr with JSON-like structured output."""
+    log_level = os.environ.get(ENV_LOG_LEVEL, "WARNING").upper()
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(
+        logging.Formatter(
+            '{"time":"%(asctime)s","level":"%(levelname)s",'
+            '"logger":"%(name)s","message":"%(message)s"}'
+        )
+    )
+    root_logger = logging.getLogger("freqtrade_mcp")
+    root_logger.setLevel(getattr(logging, log_level, logging.WARNING))
+    root_logger.addHandler(handler)
+
+
+def main() -> None:
+    """Run the freqtrade-mcp server.
+
+    Validates the freqtrade installation, configures logging, and starts
+    the MCP server with stdio transport.
+    """
+    _configure_logging()
+
+    # Validate freqtrade is available before starting
+    try:
+        ft_version = check_freqtrade_version()
+    except Exception as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # Check if docs are available (non-fatal)
+    from freqtrade_mcp.docs import _discover_docs_path
+
+    docs_path = _discover_docs_path()
+    if docs_path:
+        logger.info("Freqtrade docs available at: %s", docs_path)
+    else:
+        logger.warning(
+            "Freqtrade docs not found. Doc tools will return guidance. Set %s to enable.",
+            ENV_DOCS_PATH,
+        )
+
+    logger.info(
+        "Starting %s v%s (freqtrade %s)",
+        SERVER_NAME,
+        freqtrade_mcp.__version__,
+        ft_version,
+    )
+
+    mcp.run()
+
+
+if __name__ == "__main__":
+    main()

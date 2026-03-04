@@ -1,0 +1,300 @@
+"""Tests for the documentation reader module."""
+
+from pathlib import Path
+
+import pytest
+
+from freqtrade_mcp.docs import (
+    _discover_docs_path,
+    _extract_title,
+    _load_docs_index,
+    get_doc,
+    list_docs,
+    search_docs,
+)
+from freqtrade_mcp.exceptions import DocTopicNotFoundError, ValidationError
+from freqtrade_mcp.validators import validate_doc_search_query, validate_doc_topic
+
+
+class TestDiscoverDocsPath:
+    """Tests for _discover_docs_path."""
+
+    def test_env_var_valid_path(
+        self, monkeypatch: pytest.MonkeyPatch, fake_docs_dir: Path
+    ) -> None:
+        monkeypatch.setenv("FREQTRADE_DOCS_PATH", str(fake_docs_dir))
+        result = _discover_docs_path()
+        assert result is not None
+        assert result == fake_docs_dir.resolve()
+
+    def test_env_var_invalid_path(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        empty_dir = tmp_path / "empty"
+        empty_dir.mkdir()
+        monkeypatch.setenv("FREQTRADE_DOCS_PATH", str(empty_dir))
+        result = _discover_docs_path()
+        assert result is None
+
+    def test_env_var_not_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("FREQTRADE_DOCS_PATH", raising=False)
+        result = _discover_docs_path()
+        assert result is None
+
+    def test_env_var_nonexistent_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("FREQTRADE_DOCS_PATH", "/nonexistent/path")
+        result = _discover_docs_path()
+        assert result is None
+
+
+class TestExtractTitle:
+    """Tests for _extract_title."""
+
+    def test_h1_title(self) -> None:
+        content = "# My Great Title\n\nSome content here."
+        assert _extract_title(content, "test.md") == "My Great Title"
+
+    def test_h1_after_other_lines(self) -> None:
+        content = "![image](logo.png)\n\n# Actual Title\n\nContent."
+        assert _extract_title(content, "test.md") == "Actual Title"
+
+    def test_fallback_to_filename(self) -> None:
+        content = "No headings here, just plain text."
+        assert _extract_title(content, "strategy-callbacks.md") == "Strategy Callbacks"
+
+    def test_ignores_h2(self) -> None:
+        content = "## This is H2\n\nNot H1."
+        assert _extract_title(content, "some-file.md") == "Some File"
+
+    def test_empty_content(self) -> None:
+        assert _extract_title("", "fallback-name.md") == "Fallback Name"
+
+
+class TestLoadDocsIndex:
+    """Tests for _load_docs_index."""
+
+    def test_loads_toplevel_files(
+        self, monkeypatch: pytest.MonkeyPatch, fake_docs_dir: Path
+    ) -> None:
+        monkeypatch.setenv("FREQTRADE_DOCS_PATH", str(fake_docs_dir))
+        index = _load_docs_index()
+        assert index is not None
+        assert "strategy-callbacks" in index
+        assert "configuration" in index
+        assert "backtesting" in index
+
+    def test_loads_commands_subdir(
+        self, monkeypatch: pytest.MonkeyPatch, fake_docs_dir: Path
+    ) -> None:
+        monkeypatch.setenv("FREQTRADE_DOCS_PATH", str(fake_docs_dir))
+        index = _load_docs_index()
+        assert index is not None
+        assert "commands/backtesting" in index
+        assert "commands/trade" in index
+
+    def test_returns_none_when_no_docs(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("FREQTRADE_DOCS_PATH", raising=False)
+        index = _load_docs_index()
+        assert index is None
+
+    def test_index_values_structure(
+        self, monkeypatch: pytest.MonkeyPatch, fake_docs_dir: Path
+    ) -> None:
+        monkeypatch.setenv("FREQTRADE_DOCS_PATH", str(fake_docs_dir))
+        index = _load_docs_index()
+        assert index is not None
+        title, content, size = index["strategy-callbacks"]
+        assert title == "Strategy Callbacks"
+        assert "custom_stoploss" in content
+        assert size > 0
+
+
+class TestListDocs:
+    """Tests for list_docs."""
+
+    def test_lists_all_topics(self, monkeypatch: pytest.MonkeyPatch, fake_docs_dir: Path) -> None:
+        monkeypatch.setenv("FREQTRADE_DOCS_PATH", str(fake_docs_dir))
+        result = list_docs()
+        assert result is not None
+        assert len(result) == 5
+        topics = [t.topic for t in result]
+        assert "strategy-callbacks" in topics
+        assert "commands/backtesting" in topics
+
+    def test_filter_by_keyword(self, monkeypatch: pytest.MonkeyPatch, fake_docs_dir: Path) -> None:
+        monkeypatch.setenv("FREQTRADE_DOCS_PATH", str(fake_docs_dir))
+        result = list_docs(filter_str="strategy")
+        assert result is not None
+        assert len(result) >= 1
+        assert all("strategy" in t.topic.lower() or "strategy" in t.title.lower() for t in result)
+
+    def test_returns_none_when_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("FREQTRADE_DOCS_PATH", raising=False)
+        result = list_docs()
+        assert result is None
+
+    def test_topic_has_correct_path(
+        self, monkeypatch: pytest.MonkeyPatch, fake_docs_dir: Path
+    ) -> None:
+        monkeypatch.setenv("FREQTRADE_DOCS_PATH", str(fake_docs_dir))
+        result = list_docs()
+        assert result is not None
+        cb_topic = next(t for t in result if t.topic == "strategy-callbacks")
+        assert cb_topic.path == "strategy-callbacks.md"
+        cmd_topic = next(t for t in result if t.topic == "commands/backtesting")
+        assert cmd_topic.path == "commands/backtesting.md"
+
+
+class TestSearchDocs:
+    """Tests for search_docs."""
+
+    def test_single_word_search(
+        self, monkeypatch: pytest.MonkeyPatch, fake_docs_dir: Path
+    ) -> None:
+        monkeypatch.setenv("FREQTRADE_DOCS_PATH", str(fake_docs_dir))
+        result = search_docs("stoploss")
+        assert result is not None
+        assert len(result) >= 1
+        assert any("stoploss" in r.snippet.lower() for r in result)
+
+    def test_multi_word_and_search(
+        self, monkeypatch: pytest.MonkeyPatch, fake_docs_dir: Path
+    ) -> None:
+        monkeypatch.setenv("FREQTRADE_DOCS_PATH", str(fake_docs_dir))
+        result = search_docs("custom stoploss")
+        assert result is not None
+        assert len(result) >= 1
+        # All results must be from docs containing both words
+        for r in result:
+            assert r.topic == "strategy-callbacks"
+
+    def test_case_insensitive(self, monkeypatch: pytest.MonkeyPatch, fake_docs_dir: Path) -> None:
+        monkeypatch.setenv("FREQTRADE_DOCS_PATH", str(fake_docs_dir))
+        result = search_docs("BACKTESTING")
+        assert result is not None
+        assert len(result) >= 1
+
+    def test_no_results(self, monkeypatch: pytest.MonkeyPatch, fake_docs_dir: Path) -> None:
+        monkeypatch.setenv("FREQTRADE_DOCS_PATH", str(fake_docs_dir))
+        result = search_docs("xyznonexistent")
+        assert result is not None
+        assert len(result) == 0
+
+    def test_max_results_limit(self, monkeypatch: pytest.MonkeyPatch, fake_docs_dir: Path) -> None:
+        monkeypatch.setenv("FREQTRADE_DOCS_PATH", str(fake_docs_dir))
+        result = search_docs("the", max_results=2)
+        assert result is not None
+        assert len(result) <= 2
+
+    def test_returns_none_when_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("FREQTRADE_DOCS_PATH", raising=False)
+        result = search_docs("anything")
+        assert result is None
+
+    def test_snippet_includes_context(
+        self, monkeypatch: pytest.MonkeyPatch, fake_docs_dir: Path
+    ) -> None:
+        monkeypatch.setenv("FREQTRADE_DOCS_PATH", str(fake_docs_dir))
+        result = search_docs("bot_start")
+        assert result is not None
+        assert len(result) >= 1
+        # Snippet should have multiple lines (context around the match)
+        assert "\n" in result[0].snippet
+
+    def test_line_number_is_positive(
+        self, monkeypatch: pytest.MonkeyPatch, fake_docs_dir: Path
+    ) -> None:
+        monkeypatch.setenv("FREQTRADE_DOCS_PATH", str(fake_docs_dir))
+        result = search_docs("Callbacks")
+        assert result is not None
+        for r in result:
+            assert r.line_number >= 1
+
+
+class TestGetDoc:
+    """Tests for get_doc."""
+
+    def test_valid_topic(self, monkeypatch: pytest.MonkeyPatch, fake_docs_dir: Path) -> None:
+        monkeypatch.setenv("FREQTRADE_DOCS_PATH", str(fake_docs_dir))
+        result = get_doc("strategy-callbacks")
+        assert result is not None
+        assert result.topic == "strategy-callbacks"
+        assert result.title == "Strategy Callbacks"
+        assert "custom_stoploss" in result.content
+        assert result.size_bytes > 0
+
+    def test_commands_subtopic(self, monkeypatch: pytest.MonkeyPatch, fake_docs_dir: Path) -> None:
+        monkeypatch.setenv("FREQTRADE_DOCS_PATH", str(fake_docs_dir))
+        result = get_doc("commands/backtesting")
+        assert result is not None
+        assert result.topic == "commands/backtesting"
+        assert "freqtrade backtesting" in result.content
+
+    def test_topic_not_found(self, monkeypatch: pytest.MonkeyPatch, fake_docs_dir: Path) -> None:
+        monkeypatch.setenv("FREQTRADE_DOCS_PATH", str(fake_docs_dir))
+        with pytest.raises(DocTopicNotFoundError, match="not found"):
+            get_doc("nonexistent-topic")
+
+    def test_returns_none_when_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("FREQTRADE_DOCS_PATH", raising=False)
+        result = get_doc("strategy-callbacks")
+        assert result is None
+
+    def test_suggests_close_matches(
+        self, monkeypatch: pytest.MonkeyPatch, fake_docs_dir: Path
+    ) -> None:
+        monkeypatch.setenv("FREQTRADE_DOCS_PATH", str(fake_docs_dir))
+        # "strategy" is a substring of "strategy-callbacks", so suggestion should appear
+        with pytest.raises(DocTopicNotFoundError, match="Did you mean"):
+            get_doc("strategy-callback")
+        # "backtest" is a substring of "backtesting"
+        with pytest.raises(DocTopicNotFoundError, match="Did you mean"):
+            get_doc("backtest")
+
+
+class TestValidateDocTopic:
+    """Tests for validate_doc_topic."""
+
+    def test_valid_topics(self) -> None:
+        assert validate_doc_topic("strategy-callbacks") == "strategy-callbacks"
+        assert validate_doc_topic("configuration") == "configuration"
+        assert validate_doc_topic("commands/backtesting") == "commands/backtesting"
+        assert validate_doc_topic("freqai-running") == "freqai-running"
+
+    def test_path_traversal_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            validate_doc_topic("../etc/passwd")
+        with pytest.raises(ValidationError):
+            validate_doc_topic("../../secret")
+
+    def test_absolute_path_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            validate_doc_topic("/etc/passwd")
+
+    def test_empty_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            validate_doc_topic("")
+
+    def test_special_chars_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            validate_doc_topic("foo;rm -rf")
+        with pytest.raises(ValidationError):
+            validate_doc_topic("foo bar")
+        with pytest.raises(ValidationError):
+            validate_doc_topic("foo..bar")
+
+
+class TestValidateDocSearchQuery:
+    """Tests for validate_doc_search_query."""
+
+    def test_valid_query(self) -> None:
+        assert validate_doc_search_query("custom stoploss") == "custom stoploss"
+        assert validate_doc_search_query("  trimmed  ") == "trimmed"
+
+    def test_empty_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            validate_doc_search_query("")
+        with pytest.raises(ValidationError):
+            validate_doc_search_query("   ")
+
+    def test_too_long_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            validate_doc_search_query("a" * 300)
