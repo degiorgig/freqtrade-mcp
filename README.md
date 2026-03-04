@@ -39,7 +39,7 @@ The author(s) accept **NO responsibility or liability** for any direct, indirect
 ## Installation
 
 ```bash
-pip install freqtrade-mcp
+pip install freqtrade-mcp-server
 ```
 
 Or install from source:

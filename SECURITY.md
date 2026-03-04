@@ -62,7 +62,7 @@ freqtrade-mcp is designed to be resistant to common MCP attack vectors:
 
 ## Security Best Practices for Users
 
-1. Only install freqtrade-mcp from trusted sources (PyPI, GitHub)
-2. Keep freqtrade and freqtrade-mcp updated to the latest versions
+1. Only install freqtrade-mcp-server from trusted sources (PyPI, GitHub)
+2. Keep freqtrade and freqtrade-mcp-server updated to the latest versions
 3. Review the MCP client configuration to ensure only intended tools are exposed
 4. Set `FREQTRADE_MCP_LOG_LEVEL=WARNING` or higher in production
