@@ -8,7 +8,7 @@ If you discover a security vulnerability in freqtrade-mcp, please report it resp
 2. Email: yalcin@webliyacelebi.com
 3. Include a description of the vulnerability, steps to reproduce, and potential impact
 
-We will acknowledge receipt within 48 hours and aim to provide a fix within 7 days for critical issues.
+We will respond as soon as possible.
 
 ## MCP Threat Model
 
