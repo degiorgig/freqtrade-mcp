@@ -10,6 +10,14 @@ A **read-only MCP (Model Context Protocol) server** that provides LLM tools with
 
 The author(s) accept **NO responsibility or liability** for any direct, indirect, incidental, or consequential damages arising from the use of this software, including but not limited to financial losses from trading strategies developed with its assistance. Use entirely at your own risk. Always backtest thoroughly before deploying any strategy with real capital.
 
+## Usage Philosophy
+
+`freqtrade-mcp` is not meant to replace reading the Freqtrade documentation.
+
+It is a read-only reference layer for LLM agents. The goal is to help agents check the actual docs, public strategy APIs, method signatures, config keys, enums, and DataFrame column references before suggesting code.
+
+Agents should prefer documented public APIs and avoid relying on undocumented Freqtrade internals in strategy code.
+
 ## Features
 
 - **Strategy Method Introspection**: List and inspect all overridable IStrategy methods with full signatures, type hints, and docstrings
