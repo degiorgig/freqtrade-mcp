@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Tool parameters now expose descriptions and constraints in the MCP schema via annotated Pydantic fields
+- `freqtrade_get_config_schema` returns meaningful descriptions for known config sections instead of placeholders
+- `freqtrade_get_dataframe_columns` marks "indicators" columns as conventional names that only exist if the strategy computes them
+- `None` results (e.g. the docs index when docs are unavailable) are now cached, avoiding repeated re-scans and log spam
+- Log output is serialized with `json.dumps`, so messages containing quotes no longer produce invalid JSON
+- Faster duplicate detection in `freqtrade_search_codebase`
+
+### Fixed
+
+- Filter parameters now accept hyphens and spaces, so hyphenated doc topics (e.g. `strategy-callbacks`) and multi-word filters work
+- Changelog link in package metadata pointed to a nonexistent `main` branch
+- CI workflow triggered on the nonexistent `main` branch, so it never ran; now targets `master`
+
+### Removed
+
+- Dead code: unused `_discover_submodules` and `find_enums_in_module` helpers
+
 ## [0.1.1] - 2026-05-09
 
 ### Added

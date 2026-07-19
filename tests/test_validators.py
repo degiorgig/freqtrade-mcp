@@ -173,9 +173,23 @@ class TestValidateFilterString:
         with pytest.raises(ValidationError, match="must be 1-"):
             validate_filter_string("")
 
+    def test_hyphens_and_spaces_allowed(self) -> None:
+        """Hyphenated doc topics and multi-word filters should pass."""
+        assert validate_filter_string("strategy-callbacks") == "strategy-callbacks"
+        assert validate_filter_string("Custom Stoploss") == "custom stoploss"
+
+    def test_whitespace_only_rejected(self) -> None:
+        """Whitespace-only filters should fail."""
+        with pytest.raises(ValidationError, match="must be 1-"):
+            validate_filter_string("   ")
+
+    def test_surrounding_whitespace_stripped(self) -> None:
+        """Leading/trailing whitespace should be stripped before validation."""
+        assert validate_filter_string("  entry ") == "entry"
+
     def test_invalid_characters(self) -> None:
         """Filters with special chars should fail."""
         with pytest.raises(ValidationError, match="contains invalid characters"):
             validate_filter_string("foo.bar")
         with pytest.raises(ValidationError, match="contains invalid characters"):
-            validate_filter_string("foo bar")
+            validate_filter_string("foo;bar")

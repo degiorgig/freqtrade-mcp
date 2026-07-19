@@ -148,3 +148,16 @@ class TestTTLCacheDecorator:
         assert greet(name="alice") == "hello alice"
         assert greet(name="bob") == "hello bob"
         assert call_count == 2
+
+    def test_none_result_cached(self) -> None:
+        """A None return value should be cached, not recomputed."""
+        call_count = 0
+
+        @ttl_cache(ttl=60)
+        def lookup() -> None:
+            nonlocal call_count
+            call_count += 1
+
+        assert lookup() is None
+        assert lookup() is None
+        assert call_count == 1

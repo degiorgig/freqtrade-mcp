@@ -34,7 +34,7 @@ Agents should prefer documented public APIs and avoid relying on undocumented Fr
 
 - **Read-only**: No trading, no exchange connections, no side effects
 - **Input validation**: All LLM inputs validated with regex whitelists
-- **No eval/exec**: Only uses Python's `inspect` and `ast` modules
+- **No eval/exec**: Only uses Python's `inspect` module
 - **Namespace restricted**: Only inspects `freqtrade.*` modules
 - **stdio transport**: Local-only, no network exposure
 
@@ -49,6 +49,11 @@ Agents should prefer documented public APIs and avoid relying on undocumented Fr
 ```bash
 pip install freqtrade-mcp-server
 ```
+
+> **Important:** Install `freqtrade-mcp-server` into the **same environment** as the
+> freqtrade version you develop against, so introspection reflects the code you
+> actually run. Avoid isolated installs (pipx/uvx): they pull in their own copy of
+> freqtrade, and the server would inspect that copy instead of yours.
 
 Or install from source:
 

@@ -126,6 +126,14 @@ class TestListDocs:
         assert len(result) >= 1
         assert all("strategy" in t.topic.lower() or "strategy" in t.title.lower() for t in result)
 
+    def test_filter_with_hyphen(
+        self, monkeypatch: pytest.MonkeyPatch, fake_docs_dir: Path
+    ) -> None:
+        monkeypatch.setenv("FREQTRADE_DOCS_PATH", str(fake_docs_dir))
+        result = list_docs(filter_str="strategy-callbacks")
+        assert result is not None
+        assert [t.topic for t in result] == ["strategy-callbacks"]
+
     def test_returns_none_when_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("FREQTRADE_DOCS_PATH", raising=False)
         result = list_docs()

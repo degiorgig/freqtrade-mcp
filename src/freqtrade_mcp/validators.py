@@ -9,6 +9,7 @@ import re
 from freqtrade_mcp.constants import (
     ALLOWED_TOP_LEVEL_MODULE,
     DOC_TOPIC_PATTERN,
+    FILTER_PATTERN,
     IDENTIFIER_PATTERN,
     MAX_INPUT_LENGTH,
     MODULE_PATH_PATTERN,
@@ -111,7 +112,8 @@ def validate_class_path(path: str) -> tuple[str, str]:
 def validate_search_pattern(pattern: str) -> re.Pattern[str]:
     """Validate and compile a search regex pattern.
 
-    Only allows safe regex characters to prevent ReDoS and injection attacks.
+    Restricts the pattern to a whitelisted character set and caps its length,
+    limiting (but not eliminating) ReDoS and injection risk.
 
     Args:
         pattern: Regex pattern string to validate.
@@ -143,30 +145,32 @@ def validate_search_pattern(pattern: str) -> re.Pattern[str]:
 
 
 def validate_filter_string(value: str, label: str = "filter") -> str:
-    """Validate a simple filter string (no regex, just alphanumeric + underscore).
+    """Validate a simple filter string (no regex; letters, digits, `_`, `-`, spaces).
 
     Args:
         value: The filter string to validate.
         label: Human-readable label for error messages.
 
     Returns:
-        The validated filter string, lowercased.
+        The validated filter string, stripped and lowercased.
 
     Raises:
-        ValidationError: If the string contains invalid characters.
+        ValidationError: If the string is empty after stripping or contains
+            invalid characters.
     """
-    if not value or len(value) > MAX_INPUT_LENGTH:
-        msg = f"Invalid {label}: must be 1-{MAX_INPUT_LENGTH} characters, got {len(value)}."
+    normalized = value.strip()
+    if not normalized or len(normalized) > MAX_INPUT_LENGTH:
+        msg = f"Invalid {label}: must be 1-{MAX_INPUT_LENGTH} non-empty characters."
         raise ValidationError(msg)
 
-    if not IDENTIFIER_PATTERN.match(value):
+    if not FILTER_PATTERN.match(normalized):
         msg = (
             f"Invalid {label}: '{value}' contains invalid characters. "
-            "Only letters, digits, and underscores are allowed."
+            "Only letters, digits, underscores, hyphens, and spaces are allowed."
         )
         raise ValidationError(msg)
 
-    return value.lower()
+    return normalized.lower()
 
 
 def validate_doc_topic(topic: str) -> str:

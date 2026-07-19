@@ -1,6 +1,6 @@
 """Core introspection engine for the freqtrade codebase.
 
-Uses Python's ``inspect`` and ``ast`` modules to extract metadata from
+Uses Python's ``inspect`` module to extract metadata from
 freqtrade classes, methods, enums, and configuration. Never uses
 ``eval()`` or ``exec()``.
 """
@@ -44,7 +44,6 @@ from freqtrade_mcp.validators import (
     validate_class_path,
     validate_filter_string,
     validate_identifier,
-    validate_module_path,
     validate_search_pattern,
 )
 
@@ -407,6 +406,7 @@ def search_codebase(query: str) -> list[SymbolMatch]:
     """
     pattern = validate_search_pattern(query)
     matches: list[SymbolMatch] = []
+    seen: set[tuple[str, str, str]] = set()
     visited_modules: set[str] = set()
 
     def _scan_module(module_path: str) -> None:
@@ -441,9 +441,10 @@ def search_codebase(query: str) -> list[SymbolMatch]:
                 kind = "constant"
 
             # Avoid duplicates from re-exports
-            match = SymbolMatch(name=name, module=module_path, kind=kind)
-            if match not in matches:
-                matches.append(match)
+            key = (name, module_path, kind)
+            if key not in seen:
+                seen.add(key)
+                matches.append(SymbolMatch(name=name, module=module_path, kind=kind))
 
     # Walk freqtrade package tree
     try:
@@ -520,10 +521,10 @@ def get_config_schema(section: str | None = None) -> list[ConfigKey]:
     config_keys: list[ConfigKey] = []
 
     # Always include known top-level sections
-    for key in CONFIG_SECTIONS:
+    for key, description in CONFIG_SECTIONS.items():
         if validated_section and validated_section not in key.lower():
             continue
-        config_keys.append(ConfigKey(key=key, description=f"Freqtrade '{key}' configuration."))
+        config_keys.append(ConfigKey(key=key, description=description))
 
     # Try to extract more config info from freqtrade.configuration if available
     try:
@@ -551,7 +552,7 @@ def get_dataframe_columns(context: str | None = None) -> list[DataframeColumn]:
     """List common DataFrame columns available in strategy methods.
 
     Args:
-        context: Optional context filter ('ohlcv', 'entry', 'exit').
+        context: Optional context filter ('ohlcv', 'entry', 'exit', 'indicators').
 
     Returns:
         List of DataFrame column entries.
@@ -568,7 +569,7 @@ def get_dataframe_columns(context: str | None = None) -> list[DataframeColumn]:
         for col_name, col_desc in ctx_columns.items():
             columns.append(DataframeColumn(name=col_name, description=col_desc, context=ctx_name))
 
-    # If indicators context requested, try to discover common technical indicators
+    # Conventional indicator names — these columns exist only if the strategy computes them
     if validated_context == "indicators" or validated_context is None:
         indicator_columns = {
             "rsi": "Relative Strength Index (float64)",
@@ -590,56 +591,12 @@ def get_dataframe_columns(context: str | None = None) -> list[DataframeColumn]:
         }
         for col_name, col_desc in indicator_columns.items():
             columns.append(
-                DataframeColumn(name=col_name, description=col_desc, context="indicators")
+                DataframeColumn(
+                    name=col_name,
+                    description=f"{col_desc} — conventional name; present only if the "
+                    "strategy computes it in populate_indicators",
+                    context="indicators",
+                )
             )
 
     return columns
-
-
-def _discover_submodules(module_path: str) -> list[str]:
-    """Discover submodule names for a given module path.
-
-    Args:
-        module_path: The dotted module path to discover submodules for.
-
-    Returns:
-        List of submodule dotted paths.
-    """
-    validate_module_path(module_path)
-    try:
-        mod = _import_module(module_path)
-    except ModuleImportError:
-        return []
-
-    submodules: list[str] = []
-    if hasattr(mod, "__path__"):
-        for _, modname, _ in pkgutil.iter_modules(mod.__path__, prefix=f"{module_path}."):
-            submodules.append(modname)
-
-    return sorted(submodules)
-
-
-def find_enums_in_module(module_path: str) -> list[tuple[str, type[enum.Enum]]]:
-    """Find all Enum subclasses in a module.
-
-    Args:
-        module_path: Validated module path.
-
-    Returns:
-        List of (name, enum_class) tuples.
-    """
-    validate_module_path(module_path)
-    try:
-        mod = _import_module(module_path)
-    except ModuleImportError:
-        return []
-
-    results: list[tuple[str, type[enum.Enum]]] = []
-    for name in dir(mod):
-        if name.startswith("_"):
-            continue
-        obj = getattr(mod, name, None)
-        if isinstance(obj, type) and issubclass(obj, enum.Enum) and obj is not enum.Enum:
-            results.append((name, obj))
-
-    return sorted(results, key=lambda x: x[0])
