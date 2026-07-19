@@ -6,13 +6,15 @@ connect to exchanges, modify configuration, or perform any operation with
 side effects. No warranty is provided — see LICENSE.
 """
 
+import json
 import logging
 import os
 import sys
-from typing import Any
+from typing import Annotated, Any
 
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
+from pydantic import Field
 
 import freqtrade_mcp
 from freqtrade_mcp._version_check import check_freqtrade_version
@@ -69,7 +71,16 @@ mcp = FastMCP(SERVER_NAME, instructions=SERVER_DESCRIPTION)
 
 @mcp.tool(annotations=_TOOL_ANNOTATIONS)
 def freqtrade_list_strategy_methods(
-    filter: str | None = None,  # noqa: A002
+    filter: Annotated[  # noqa: A002
+        str | None,
+        Field(
+            description=(
+                "Optional filter to narrow results. "
+                "Examples: 'indicator', 'entry', 'exit', 'callback', 'custom'."
+            ),
+            max_length=256,
+        ),
+    ] = None,
 ) -> list[dict[str, Any]]:
     """List all overridable methods from IStrategy.
 
@@ -89,7 +100,12 @@ def freqtrade_list_strategy_methods(
 
 
 @mcp.tool(annotations=_TOOL_ANNOTATIONS)
-def freqtrade_get_method_signature(method_name: str) -> dict[str, Any]:
+def freqtrade_get_method_signature(
+    method_name: Annotated[
+        str,
+        Field(description="Name of the IStrategy method to inspect.", max_length=256),
+    ],
+) -> dict[str, Any]:
     """Get full signature of a specific IStrategy method.
 
     Returns the complete method signature including all parameters with their
@@ -107,7 +123,17 @@ def freqtrade_get_method_signature(method_name: str) -> dict[str, Any]:
 
 
 @mcp.tool(annotations=_TOOL_ANNOTATIONS)
-def freqtrade_get_class_info(class_path: str) -> dict[str, Any]:
+def freqtrade_get_class_info(
+    class_path: Annotated[
+        str,
+        Field(
+            description=(
+                "Fully-qualified class path. Example: 'freqtrade.strategy.interface.IStrategy'."
+            ),
+            max_length=256,
+        ),
+    ],
+) -> dict[str, Any]:
     """Inspect any freqtrade class.
 
     Returns class docstring, method resolution order (MRO), public methods,
@@ -127,7 +153,10 @@ def freqtrade_get_class_info(class_path: str) -> dict[str, Any]:
 
 @mcp.tool(annotations=_TOOL_ANNOTATIONS)
 def freqtrade_list_enums(
-    filter: str | None = None,  # noqa: A002
+    filter: Annotated[  # noqa: A002
+        str | None,
+        Field(description="Optional filter pattern to narrow enum results.", max_length=256),
+    ] = None,
 ) -> list[dict[str, Any]]:
     """List all trading-related enums from freqtrade.
 
@@ -146,7 +175,17 @@ def freqtrade_list_enums(
 
 
 @mcp.tool(annotations=_TOOL_ANNOTATIONS)
-def freqtrade_get_enum_values(enum_path: str) -> dict[str, Any]:
+def freqtrade_get_enum_values(
+    enum_path: Annotated[
+        str,
+        Field(
+            description=(
+                "Fully-qualified enum path. Example: 'freqtrade.enums.signaltype.SignalDirection'."
+            ),
+            max_length=256,
+        ),
+    ],
+) -> dict[str, Any]:
     """Get all values of a specific freqtrade enum.
 
     Returns every member of the enum with its name and value.
@@ -164,7 +203,18 @@ def freqtrade_get_enum_values(enum_path: str) -> dict[str, Any]:
 
 
 @mcp.tool(annotations=_TOOL_ANNOTATIONS)
-def freqtrade_search_codebase(query: str) -> list[dict[str, Any]]:
+def freqtrade_search_codebase(
+    query: Annotated[
+        str,
+        Field(
+            description=(
+                "Search pattern for symbol names (classes, functions, constants). "
+                "Supports basic regex (alphanumeric, underscores, wildcards)."
+            ),
+            max_length=256,
+        ),
+    ],
+) -> list[dict[str, Any]]:
     """Search for symbols in the freqtrade codebase by name pattern.
 
     Searches for classes, functions, constants, and enums matching the given
@@ -183,7 +233,18 @@ def freqtrade_search_codebase(query: str) -> list[dict[str, Any]]:
 
 
 @mcp.tool(annotations=_TOOL_ANNOTATIONS)
-def freqtrade_get_callback_info(callback_name: str) -> dict[str, Any]:
+def freqtrade_get_callback_info(
+    callback_name: Annotated[
+        str,
+        Field(
+            description=(
+                "Name of the strategy callback method. "
+                "Examples: 'bot_start', 'custom_stake_amount', 'custom_stoploss'."
+            ),
+            max_length=256,
+        ),
+    ],
+) -> dict[str, Any]:
     """Get detailed info about a strategy callback method.
 
     Returns the full signature, parameters with types, return type,
@@ -202,7 +263,18 @@ def freqtrade_get_callback_info(callback_name: str) -> dict[str, Any]:
 
 
 @mcp.tool(annotations=_TOOL_ANNOTATIONS)
-def freqtrade_get_config_schema(section: str | None = None) -> list[dict[str, Any]]:
+def freqtrade_get_config_schema(
+    section: Annotated[
+        str | None,
+        Field(
+            description=(
+                "Optional config section filter. "
+                "Examples: 'exchange', 'pairlist', 'stoploss', 'order_types'."
+            ),
+            max_length=256,
+        ),
+    ] = None,
+) -> list[dict[str, Any]]:
     """Return known freqtrade configuration keys and their descriptions.
 
     Lists configuration keys organized by section. Use the optional section
@@ -220,11 +292,25 @@ def freqtrade_get_config_schema(section: str | None = None) -> list[dict[str, An
 
 
 @mcp.tool(annotations=_TOOL_ANNOTATIONS)
-def freqtrade_get_dataframe_columns(context: str | None = None) -> list[dict[str, Any]]:
+def freqtrade_get_dataframe_columns(
+    context: Annotated[
+        str | None,
+        Field(
+            description=(
+                "Optional context filter for columns. "
+                "Options: 'ohlcv', 'entry', 'exit', 'indicators'. "
+                "If omitted, returns all known columns."
+            ),
+            max_length=256,
+        ),
+    ] = None,
+) -> list[dict[str, Any]]:
     """List common DataFrame columns available in strategy methods.
 
     Returns column names, types, and descriptions for columns available in
     populate_indicators, populate_entry_trend, populate_exit_trend, etc.
+    Columns in the "indicators" context are conventional names only — they
+    exist in the DataFrame only if the strategy computes them.
 
     Args:
         context: Optional context filter: "ohlcv", "entry", "exit", or "indicators".
@@ -261,7 +347,16 @@ def freqtrade_get_version_info() -> dict[str, str]:
 
 @mcp.tool(annotations=_TOOL_ANNOTATIONS)
 def freqtrade_list_docs(
-    filter: str | None = None,  # noqa: A002
+    filter: Annotated[  # noqa: A002
+        str | None,
+        Field(
+            description=(
+                "Optional keyword filter for doc topics. "
+                "Examples: 'strategy', 'freqai', 'backtesting'."
+            ),
+            max_length=256,
+        ),
+    ] = None,
 ) -> list[dict[str, Any]] | dict[str, str]:
     """List available freqtrade documentation topics.
 
@@ -283,8 +378,20 @@ def freqtrade_list_docs(
 
 @mcp.tool(annotations=_TOOL_ANNOTATIONS)
 def freqtrade_search_docs(
-    query: str,
-    max_results: int = 10,
+    query: Annotated[
+        str,
+        Field(
+            description=(
+                "Search query text. Searches across all documentation content. "
+                "Multiple words use AND logic."
+            ),
+            max_length=256,
+        ),
+    ],
+    max_results: Annotated[
+        int,
+        Field(description="Maximum number of matching snippets to return (1-50).", ge=1, le=50),
+    ] = 10,
 ) -> list[dict[str, Any]] | dict[str, str]:
     """Search across all freqtrade documentation.
 
@@ -306,7 +413,18 @@ def freqtrade_search_docs(
 
 
 @mcp.tool(annotations=_TOOL_ANNOTATIONS)
-def freqtrade_get_doc(topic: str) -> dict[str, Any] | dict[str, str]:
+def freqtrade_get_doc(
+    topic: Annotated[
+        str,
+        Field(
+            description=(
+                "Documentation topic name. Examples: 'strategy-callbacks', 'configuration', "
+                "'commands/backtesting'. Use freqtrade_list_docs to discover available topics."
+            ),
+            max_length=256,
+        ),
+    ],
+) -> dict[str, Any] | dict[str, str]:
     """Read a specific freqtrade documentation page.
 
     Returns the full markdown content of a documentation page by topic name.
@@ -326,16 +444,25 @@ def freqtrade_get_doc(topic: str) -> dict[str, Any] | dict[str, str]:
     return result.model_dump()
 
 
+class _JsonFormatter(logging.Formatter):
+    """Serialize each log record as one JSON object per line."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        return json.dumps(
+            {
+                "time": self.formatTime(record),
+                "level": record.levelname,
+                "logger": record.name,
+                "message": record.getMessage(),
+            }
+        )
+
+
 def _configure_logging() -> None:
-    """Configure logging to stderr with JSON-like structured output."""
+    """Configure logging to stderr with JSON structured output."""
     log_level = os.environ.get(ENV_LOG_LEVEL, "WARNING").upper()
     handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(
-        logging.Formatter(
-            '{"time":"%(asctime)s","level":"%(levelname)s",'
-            '"logger":"%(name)s","message":"%(message)s"}'
-        )
-    )
+    handler.setFormatter(_JsonFormatter())
     root_logger = logging.getLogger("freqtrade_mcp")
     root_logger.setLevel(getattr(logging, log_level, logging.WARNING))
     root_logger.addHandler(handler)

@@ -103,7 +103,7 @@ class GetDataframeColumnsInput(BaseModel):
         default=None,
         description=(
             "Optional context filter for columns. "
-            "Options: 'ohlcv', 'entry', 'exit'. "
+            "Options: 'ohlcv', 'entry', 'exit', 'indicators'. "
             "If omitted, returns all known columns."
         ),
         max_length=256,

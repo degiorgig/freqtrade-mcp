@@ -116,12 +116,13 @@ def ttl_cache(ttl: int = DEFAULT_CACHE_TTL) -> Callable[[Callable[P, R]], Callab
             key_parts.extend(f"{k}={v!r}" for k, v in sorted(kwargs.items()))
             key = ":".join(key_parts)
 
-            cached = cache.get(key)
-            if cached is not None:
-                return cached  # type: ignore[no-any-return]
+            # Results are wrapped in a 1-tuple so that None results are cacheable too
+            hit = cache.get(key)
+            if hit is not None:
+                return hit[0]  # type: ignore[no-any-return]
 
             result = func(*args, **kwargs)
-            cache.set(key, result)
+            cache.set(key, (result,))
             return result
 
         # Expose cache for manual invalidation
