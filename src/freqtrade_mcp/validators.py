@@ -152,23 +152,25 @@ def validate_filter_string(value: str, label: str = "filter") -> str:
         label: Human-readable label for error messages.
 
     Returns:
-        The validated filter string, lowercased.
+        The validated filter string, stripped and lowercased.
 
     Raises:
-        ValidationError: If the string contains invalid characters.
+        ValidationError: If the string is empty after stripping or contains
+            invalid characters.
     """
-    if not value or len(value) > MAX_INPUT_LENGTH:
-        msg = f"Invalid {label}: must be 1-{MAX_INPUT_LENGTH} characters, got {len(value)}."
+    normalized = value.strip()
+    if not normalized or len(normalized) > MAX_INPUT_LENGTH:
+        msg = f"Invalid {label}: must be 1-{MAX_INPUT_LENGTH} non-empty characters."
         raise ValidationError(msg)
 
-    if not FILTER_PATTERN.match(value):
+    if not FILTER_PATTERN.match(normalized):
         msg = (
             f"Invalid {label}: '{value}' contains invalid characters. "
             "Only letters, digits, underscores, hyphens, and spaces are allowed."
         )
         raise ValidationError(msg)
 
-    return value.lower()
+    return normalized.lower()
 
 
 def validate_doc_topic(topic: str) -> str:
