@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-07-19
+
 ### Changed
 
+- CI: bump actions/checkout to v5 and actions/setup-python to v6 (Node 24 runners)
 - Tool parameters now expose descriptions and constraints in the MCP schema via annotated Pydantic fields
 - `freqtrade_get_config_schema` returns meaningful descriptions for known config sections instead of placeholders
 - `freqtrade_get_dataframe_columns` marks "indicators" columns as conventional names that only exist if the strategy computes them
@@ -18,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Filter parameters now accept hyphens and spaces, so hyphenated doc topics (e.g. `strategy-callbacks`) and multi-word filters work
+- Filter parameters now accept hyphens and spaces, so hyphenated doc topics (e.g. `strategy-callbacks`) and multi-word filters work; values are stripped and whitespace-only input is rejected
 - Changelog link in package metadata pointed to a nonexistent `main` branch
 - CI workflow triggered on the nonexistent `main` branch, so it never ran; now targets `master`
 
@@ -69,6 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/CD with GitHub Actions
 - Security documentation with MCP threat model
 
-[Unreleased]: https://github.com/yalcin/freqtrade-mcp/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/yalcin/freqtrade-mcp/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/yalcin/freqtrade-mcp/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/yalcin/freqtrade-mcp/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/yalcin/freqtrade-mcp/releases/tag/v0.1.0
